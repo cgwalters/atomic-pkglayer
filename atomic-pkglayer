@@ -191,6 +191,12 @@ def keyfile_lookup_value(keyfile, section, key, default=None):
     except GLib.GError, e:
         return default
 
+def keyfile_remove_value(keyfile, section, key):
+    try:
+        keyfile.remove_key(section, key)
+    except GLib.GError, e:
+        pass
+
 if __name__ == '__main__':
     setup_locale()
 
@@ -259,21 +265,24 @@ if __name__ == '__main__':
     else:
         newrev = currentrev
 
-    for child in os.listdir(PKGCACHE_DIR):
-        childpath = os.path.join(PKGCACHE_DIR, child)
-        GSystem.shutil_rm_rf(Gio.File.new_for_path(childpath), None)
-    util.downloadPackages(layered_packages, PKGCACHE_DIR)
-    print "Package downloads complete"
+    if layered_packages:
+        for child in os.listdir(PKGCACHE_DIR):
+            childpath = os.path.join(PKGCACHE_DIR, child)
+            GSystem.shutil_rm_rf(Gio.File.new_for_path(childpath), None)
+        util.downloadPackages(layered_packages, PKGCACHE_DIR)
+        print "Package downloads complete"
 
     new_origin = GLib.KeyFile.new()
     # Need g_key_file_copy
     new_origin.load_from_file(originpath.get_path(), 0)
-    try:
-        new_origin.remove_key('origin', 'refspec')
-    except GLib.GError, e:
-        pass
-    new_origin.set_value('origin', 'base_refspec', base_refspec)
-    new_origin.set_string_list('origin', 'packages', sorted(list(layered_packages)))
+    if layered_packages:
+        keyfile_remove_value(new_origin, 'origin', 'refspec')
+        new_origin.set_value('origin', 'base_refspec', base_refspec)
+        new_origin.set_string_list('origin', 'packages', sorted(list(layered_packages)))
+    else:
+        new_origin.set_value('origin', 'refspec', base_refspec)
+        keyfile_remove_value(new_origin, 'origin', 'base_refspec')
+        keyfile_remove_value(new_origin, 'origin', 'packages')
 
     print "Deploying base tree"
     _,new_deployment = sysroot.deploy_tree(current_deployment.get_osname(),
@@ -284,28 +293,29 @@ if __name__ == '__main__':
     newroot = sysroot.get_deployment_directory(new_deployment)
     print "Tree root prepared: %s" % (newroot.get_path(), )
 
-    # The rpmdb will be hardlinked, but we're about to mutate it below.
-    # un-hardlink so that we don't corrupt the object store.
-    print "De-hardlinking new RPM database"
-    new_rpmdb_path = os.path.join(newroot.get_path(), 'usr/share/rpm')
-    for child in os.listdir(new_rpmdb_path):
-        srcpath = Gio.File.new_for_path(os.path.join(new_rpmdb_path, child))
-        tmppath = Gio.File.new_for_path(os.path.join(new_rpmdb_path, child + '.tmp'))
-        srcpath.copy(tmppath, Gio.FileCopyFlags.ALL_METADATA, None, None, None)
-        GSystem.file_rename(tmppath, srcpath, None)
+    if layered_packages:
+        # The rpmdb will be hardlinked, but we're about to mutate it below.
+        # un-hardlink so that we don't corrupt the object store.
+        print "De-hardlinking new RPM database"
+        new_rpmdb_path = os.path.join(newroot.get_path(), 'usr/share/rpm')
+        for child in os.listdir(new_rpmdb_path):
+            srcpath = Gio.File.new_for_path(os.path.join(new_rpmdb_path, child))
+            tmppath = Gio.File.new_for_path(os.path.join(new_rpmdb_path, child + '.tmp'))
+            srcpath.copy(tmppath, Gio.FileCopyFlags.ALL_METADATA, None, None, None)
+            GSystem.file_rename(tmppath, srcpath, None)
 
-    print "Adding packages"
-    rpm_argv = ['rpm', '--install', '--root', newroot.get_path(),
+        print "Adding packages"
+        rpm_argv = ['rpm', '--install', '--root', newroot.get_path(),
                 '--dbpath', '/usr/share/rpm',
-                '--noscripts', '--notriggers',
-                '--nosignature',
-                '--oldpackage', '--ignoresize'] 
-    rpm_argv.extend([os.path.join(PKGCACHE_DIR, x) for x in os.listdir(PKGCACHE_DIR)])
+                    '--noscripts', '--notriggers',
+                    '--nosignature',
+                    '--oldpackage', '--ignoresize'] 
+        rpm_argv.extend([os.path.join(PKGCACHE_DIR, x) for x in os.listdir(PKGCACHE_DIR)])
 
-    run_sync(rpm_argv)
-    print "Packages installed in new root"
+        run_sync(rpm_argv)
+        print "Packages installed in new root"
 
-    run_posts(newroot.get_path())    
+        run_posts(newroot.get_path())    
 
     print "Deploying"
 
