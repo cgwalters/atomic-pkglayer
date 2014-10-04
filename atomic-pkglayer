@@ -151,6 +151,7 @@ class YumDownloader(YumUtilBase):
 
         # use downloader from YumBase
         exit_code = 0
+        print "Downloading: %s" % (' '.join([str(x) for x in toDownload]), )
         probs = self.downloadPkgs(toDownload)
         if probs:
             exit_code = 2
@@ -261,7 +262,6 @@ if __name__ == '__main__':
     for child in os.listdir(PKGCACHE_DIR):
         childpath = os.path.join(PKGCACHE_DIR, child)
         GSystem.shutil_rm_rf(Gio.File.new_for_path(childpath), None)
-    print "Downloading: %s" % (' '.join(layered_packages, ))
     util.downloadPackages(layered_packages, PKGCACHE_DIR)
     print "Package downloads complete"
 
