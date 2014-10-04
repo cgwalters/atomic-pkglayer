@@ -32,6 +32,25 @@ Anyways, let's reboot, and notice that strace is available.
 A very important thing to note; we do have a single unified RPM
 database, still in /usr/share/rpm.
 
+Upgrading
+---------
+
+    # ./atomic-pkglayer upgrade
+
+This will check for *both* tree upgrades and new packages.  Oh, and it
+will redownload the packages every time.  Because, again, this is just
+a proof of concept...
+
+Removing layered packages
+-------------------------
+
+    # ./atomic-pkglayer remove strace
+
+Unlike most package systems, this can *only* be used to remove
+explicitly added packages.  It's not allowed to remove packages from
+the base tree, nor packages that are intermediate dependencies of
+added packages.
+
 Integrating this into rpm-ostree
 --------------------------------
 
