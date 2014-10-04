@@ -188,7 +188,7 @@ def run_posts(root):
 def keyfile_lookup_value(keyfile, section, key, default=None):
     try:
         return keyfile.get_value(section, key)
-    except GLib.KeyFileError, e:
+    except GLib.GError, e:
         return default
 
 if __name__ == '__main__':
@@ -268,7 +268,10 @@ if __name__ == '__main__':
     new_origin = GLib.KeyFile.new()
     # Need g_key_file_copy
     new_origin.load_from_file(originpath.get_path(), 0)
-    new_origin.remove_key('origin', 'refspec')
+    try:
+        new_origin.remove_key('origin', 'refspec')
+    except GLib.GError, e:
+        pass
     new_origin.set_value('origin', 'base_refspec', base_refspec)
     new_origin.set_string_list('origin', 'packages', sorted(list(layered_packages)))
 
