@@ -1,8 +1,7 @@
-#!/usr/bin/python 
+#!/usr/bin/env python
 #
-# Demostrate basic package layering for rpm-ostree
-# Forked from yumdownloader.
-
+# Copyright (C) 2014 Colin Walters <walters@verbum.org>
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
@@ -19,8 +18,8 @@
 
 import sys
 import os
-import tempfile
-import os.path
+import subprocess
+import argparse
 sys.path.insert(0,'/usr/share/yum-cli')
 
 import yum
@@ -34,10 +33,22 @@ from urlparse import urljoin
 from urlgrabber.progress import TextMeter
 import shutil
 
-from gi.repository import OSTree
-
 import rpmUtils
 import logging
+
+from gi.repository import GLib, Gio
+from gi.repository import GSystem, OSTree
+
+PKGCACHE_DIR = '/var/cache/atomic'
+
+def fatal(msg):
+    sys.stderr.write('error: ' + msg + '\n')
+    sys.exit(1)
+
+def run_sync(args, **kwargs):
+    """Wraps subprocess.check_call(), logging the command line too."""
+    print "Running: %s" % (subprocess.list2cmdline(args), )
+    subprocess.check_call(args, **kwargs)
 
 class YumDownloader(YumUtilBase):
     NAME = 'yumdownloader'
@@ -52,72 +63,19 @@ class YumDownloader(YumUtilBase):
         self.logger = logging.getLogger("yum.verbose.cli.yumdownloader")  
         
         self.localPackages = []
-                          
-        # Add util commandline options to the yum-cli ones
-        self.optparser = self.getOptionParser() 
-        try:
-            self.main()
-        except (OSError, IOError), e:
-            self.logger.error(exception2msg(e))
-            sys.exit(1)
-
-    def main(self):
-        # Add command line option specific to yumdownloader
-        self.addCmdOptions()
-        # Parse the commandline option and setup the basics.
-        try:
-            opts = self.doUtilConfigSetup()
-        except yum.Errors.RepoError, e:
-            self.logger.error(exception2msg(e))
-            sys.exit(50)
-                
-        # Check if there is anything to do.
-        if len(self.cmds) < 1: 
-            print self.optparser.format_help()
-            sys.exit(0)
 
         # make yumdownloader work as non root user.
         if not self.setCacheDir():
             self.logger.error("Error: Could not make cachedir, exiting")
             sys.exit(50)
-
-        # override all pkgdirs
-        self.conf.downloaddir = opts.destdir
             
-        if opts.source:
-            # Setup source repos
-            self.arch.archlist.append('src')
-            self.setupSourceRepos()
-
         # Setup yum (Ts, RPM db, Repo & Sack)
-        self.doUtilYumSetup()
-        # Do the real action
-        self.exit_code = self.downloadPackages(opts)
+        self.doUtilYumSetup([])
         
-    def setupSourceRepos(self):
-        # enable the -source repos for enabled primary repos
-
-        enabled = {}
-        for repo in self.repos.findRepos('*'):
-            enabled[repo.id] = repo.isEnabled()
-
-        for repo in self.repos.findRepos('*'):
-            if repo.id.endswith('-source'):
-                primary = repo.id[:-7]
-            elif rhn_source_repos and repo.id.endswith('-source-rpms'):
-                primary = repo.id[:-12] + '-rpms'
-            else:
-                continue
-
-            if not repo.isEnabled() and enabled.get(primary):
-                self.logger.info('Enabling %s repository' % repo.id)
-                repo.enable()
-        
-    def downloadPackages(self,opts):
+    def downloadPackages(self, packages, destdir):
         
         toDownload = []
     
-        packages = self.cmds
         for pkg in packages:
             toActOn = []
 
@@ -157,24 +115,18 @@ class YumDownloader(YumUtilBase):
                 self.logger.error('No Match for argument %s' % pkg)
                 continue
             for newpkg in installable:
-                toActOn.extend(_best_convert_pkg2srcpkgs(self, opts, newpkg))
+                toActOn.append(newpkg)
             if toActOn:
                 pkgGroups = self._groupPackages(toActOn)
                 for group in pkgGroups:
                     pkgs = pkgGroups[group]
-                    if opts.source:
-                        toDownload.extend(self.bestPackagesFromList(pkgs, 'src'))
-                    elif opts.archlist:
-                        for arch in opts.archlist.split(','):
-                            toDownload.extend(self.bestPackagesFromList(pkgs, arch))
-                    else:
-                        toDownload.extend(self.bestPackagesFromList(pkgs))
+                    toDownload.extend(self.bestPackagesFromList(pkgs))
                             
         # If the user supplies to --resolve flag, resolve dependencies for
         # all packages
         # note this might require root access because the headers need to be
         # downloaded into the cachedir (is there a way around this)
-        if opts.resolve:
+        if True:
             self.doTsSetup()
             # Act as if we were to install the packages in toDownload
             for po in toDownload:
@@ -189,13 +141,11 @@ class YumDownloader(YumUtilBase):
         if len(toDownload) == 0:
             self.logger.error('Nothing to download')
             sys.exit(1)
-        if opts.urls:
-            for pkg in toDownload:
-                print urljoin(pkg.repo.urls[0], pkg.relativepath)
-            return 0
 
         # set localpaths
         for pkg in toDownload:
+            rpmfn = os.path.basename(pkg.remote_path)
+            pkg.localpath = os.path.join(destdir, rpmfn)
             pkg.repo.copy_local = True
             pkg.repo.cache = 0
 
@@ -219,45 +169,145 @@ class YumDownloader(YumUtilBase):
                 pkgGroups[na].append(po)
         return pkgGroups
             
-    def addCmdOptions(self):
-        # this if for compatibility with old API (utils.py from yum < 3.2.23)
-        if hasattr(self,'getOptionGroup'): # check if the group option API is available
-            group = self.getOptionGroup()
-        else:
-            group = self.optparser 
-        group.add_option("--destdir", default=".", dest="destdir",
-          help='destination directory (defaults to current directory)')
-        group.add_option("--urls", default=False, dest="urls", action="store_true",
-          help='just list the urls it would download instead of downloading')
-        group.add_option("--resolve", default=False, dest="resolve", action="store_true",
-          help='resolve dependencies and download required packages')
-        group.add_option("--source", default=False, dest="source", action="store_true",
-          help='operate on source packages')
-        group.add_option("--archlist",
-          help="only download packages of given and compatible architectures")
+    # sligly modified from the one in YumUtilBase    
+    def doUtilYumSetup(self,opts):
+        """do a default setup for all the normal/necessary yum components,
+           really just a shorthand for testing"""
+        try:
+            self._getRepos(doSetup = True)
+            archlist = rpmUtils.arch.getArchList()
+            self._getSacks(archlist=archlist)
+        except yum.Errors.YumBaseError, msg:
+            self.logger.critical(exception2msg(msg))
+            sys.exit(1)
 
+def run_posts(root):
+    run_sync(['ldconfig', '-r', root])
 
-def do_upgrade():
-    tmpd = tempfile.mkdtemp('', 'atomic-pkglayer')
-    os.chdir(tmpd)
-    YumDownloader()
+def keyfile_lookup_value(keyfile, section, key, default=None):
+    try:
+        return keyfile.get_value(section, key)
+    except GLib.KeyFileError, e:
+        return default
 
 if __name__ == '__main__':
     setup_locale()
 
+    parser = argparse.ArgumentParser(description='Hybrid of rpm-ostree + yum')
+    parser.add_argument('--sysroot', type=str, required=True, help='Path to config file')
+
     sysroot = OSTree.Sysroot.new_default()
     sysroot.load(None)
+    _,repo = sysroot.get_repo(None)
 
-    if not os.path.isdir(layered_packages_dir):
-        os.makedir(layered_packages_dir)
+    current_deployment = sysroot.get_booted_deployment()
+    if current_deployment is None:
+        fatal("Not in a booted OSTree deployment")
+    current_deployment_root = sysroot.get_deployment_directory(current_deployment)
+    originpath = sysroot.get_deployment_origin_path(current_deployment_root)
 
-    cmd = sys.argv[1]
-    if cmd == 'upgrade':
-        do_upgrade()
-    elif cmd == 'add':
-        do_add(sys.argv[2:])
-    elif cmd == 'remove':
-        do_remove(sys.argv[2:])
+    origin = GLib.KeyFile.new()
+    origin.load_from_file(originpath.get_path(), 0)
+
+    base_refspec = keyfile_lookup_value(origin, 'origin', 'refspec')
+    if base_refspec is not None:
+        layered_packages = set()
+        print "Converting from refspec: " + base_refspec
     else:
-        sys.stderr.write("usage: uprade/add/remove package [package...]\n")
-        sys.exit(1)
+        base_refspec = keyfile_lookup_value(origin, 'origin', 'base_refspec')
+        if base_refspec is not None:
+            layered_packages = set(origin.get_string_list('origin', 'packages'))
+            print "Using base refspec: " + base_refspec
+        else:
+            fatal("Unknown origin specification")
+
+    _,ostree_remote,ostree_ref = OSTree.parse_refspec(base_refspec)
+    if ostree_remote is None:
+        fatal("Current origin has no OSTree remote")
+
+    _,currentrev = repo.resolve_rev(base_refspec, False)
+
+    GSystem.file_ensure_directory(Gio.File.new_for_path(PKGCACHE_DIR), True, None)
+
+    util = YumDownloader()
+    
+    cmd = sys.argv[1]
+    args = sys.argv[2:]
+    upgrade_tree = False
+    if cmd == 'upgrade':
+        upgrade_tree = True
+    elif cmd == 'add':
+        layered_packages.update(set(args))
+    elif cmd == 'remove':
+        for arg in args:
+            try:
+                layered_packages.remove(arg)
+            except KeyError, e:
+                fatal("Package '%s' is not in set of layered packages" % (arg, ))
+    else:
+        fatal("Unknown command '%s'" % (cmd, ))
+
+    if upgrade_tree:
+        print "Checking for new tree content"
+        repo.pull(ostree_remote, [ostree_ref], 0, None, None)
+        _,newrev = repo.resolve_rev(base_refspec, False)
+        if currentrev == newrev:
+            print "Tree is unchanged at %s" % (newrev, )
+        else:
+            print "%s is now %s" % (base_refspec, newrev, )
+    else:
+        newrev = currentrev
+
+    for child in os.listdir(PKGCACHE_DIR):
+        childpath = os.path.join(PKGCACHE_DIR, child)
+        GSystem.shutil_rm_rf(Gio.File.new_for_path(childpath), None)
+    print "Downloading: %s" % (' '.join(layered_packages, ))
+    util.downloadPackages(layered_packages, PKGCACHE_DIR)
+    print "Package downloads complete"
+
+    new_origin = GLib.KeyFile.new()
+    # Need g_key_file_copy
+    new_origin.load_from_file(originpath.get_path(), 0)
+    new_origin.remove_key('origin', 'refspec')
+    new_origin.set_value('origin', 'base_refspec', base_refspec)
+    new_origin.set_string_list('origin', 'packages', sorted(list(layered_packages)))
+
+    print "Deploying base tree"
+    _,new_deployment = sysroot.deploy_tree(current_deployment.get_osname(),
+                                           newrev,
+                                           new_origin,
+                                           current_deployment, None, None)
+
+    newroot = sysroot.get_deployment_directory(new_deployment)
+    print "Tree root prepared: %s" % (newroot.get_path(), )
+
+    # The rpmdb will be hardlinked, but we're about to mutate it below.
+    # un-hardlink so that we don't corrupt the object store.
+    print "De-hardlinking new RPM database"
+    new_rpmdb_path = os.path.join(newroot.get_path(), 'usr/share/rpm')
+    for child in os.listdir(new_rpmdb_path):
+        srcpath = Gio.File.new_for_path(os.path.join(new_rpmdb_path, child))
+        tmppath = Gio.File.new_for_path(os.path.join(new_rpmdb_path, child + '.tmp'))
+        srcpath.copy(tmppath, Gio.FileCopyFlags.ALL_METADATA, None, None, None)
+        GSystem.file_rename(tmppath, srcpath, None)
+
+    print "Adding packages"
+    rpm_argv = ['rpm', '--install', '--root', newroot.get_path(),
+                '--dbpath', '/usr/share/rpm',
+                '--noscripts', '--notriggers',
+                '--nosignature',
+                '--oldpackage', '--ignoresize'] 
+    rpm_argv.extend([os.path.join(PKGCACHE_DIR, x) for x in os.listdir(PKGCACHE_DIR)])
+
+    run_sync(rpm_argv)
+    print "Packages installed in new root"
+
+    run_posts(newroot.get_path())    
+
+    print "Deploying"
+
+    sysroot.simple_write_deployment(new_deployment.get_osname(),
+                                    new_deployment, current_deployment, 0, None)
+
+    print "Use \"systemctl reboot\" for the changes to take effect"
+
