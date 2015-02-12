@@ -1,3 +1,8 @@
+This patchset has moved
+-----------------------
+
+See https://github.com/projectatomic/rpm-ostree/pull/107
+
 Layering RPM packages on top of an (rpm-)ostree tree
 ----------------------------------------------------
 
