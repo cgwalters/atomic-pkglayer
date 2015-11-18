@@ -1,0 +1,28 @@
+- name: Install wget + kernel-debug on RHELAH
+  hosts: all
+  sudo: yes
+
+  vars:
+    toolsimage: docker-registry.usersys.redhat.com/cgwalters/rhel-tools
+
+  tasks:
+    # Sadly, docker-registry.usersys is not signed
+    - lineinfile: dest=/etc/sysconfig/docker regexp=INSECURE_REGISTRY line="INSECURE_REGISTRY='--insecure-registry 0.0.0.0/0'"
+
+    - service: name=docker state=restarted
+
+    - command: "docker pull {{toolsimage}}"
+
+    - command: docker run -v /etc/yum.repos.d:/etc/yum.repos.d:ro --privileged --pid=host --net=host -v /root:/root --rm --entrypoint /bin/sh {{toolsimage}} -c 'cd /root && yum makecache && yumdownloader wget kernel-debug'
+
+    - command: atomic run {{toolsimage}} /host/root/kernel-debug*.rpm /host/root/wget*.rpm
+
+    - include: ../../atomic-ci-jobs/project/playbooks/ans_reboot.yaml
+
+    - shell: rpm -q wget
+      changed_when: False
+
+    - shell: uname -r | grep x86_64.debug
+      changed_when: False
+
+    
