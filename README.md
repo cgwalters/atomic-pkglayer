@@ -21,9 +21,33 @@ curl -O http://example.com/kernel-debug.rpm
 exit
 ```
 
-You're now in a shell on the host:
+You're now back in a shell on the host:
 
 ```
 atomic host status
+```
+
+Notice that we have a custom tree commit with a `local` version,
+which combines the base tree with our custom packages.
+
+To go to the new deployment:
+
+```
 systemctl reboot
 ```
+
+To revert back:
+
+```
+atomic host rollback
+systemctl reboot
+```
+
+To free up the space occupied by our custom tree (be sure you have
+performed the rollback to the production tree first):
+
+```
+ostree refs --delete temp-local
+ostree admin undeploy 1
+```
+
