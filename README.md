@@ -4,26 +4,57 @@ This script supports installing an arbitrary set of RPMs
 as a layer onto an Atomic Host system.  The RPMs must not need
 dependencies outside of the Atomic Host.
 
-First, start and enter a shell in the tools container:
+#### On the Atomic Host system
+
+Start and enter a shell in the tools container
+
 ```
 atomic run rhel7/rhel-tools
 ```
 
-Inside the tools container:
+#### Inside the tools container
+
+##### Install `atomic-pkglayer`
 
 ```
-yum -y install pygobject3-base
 cd /root
 git clone https://github.com/cgwalters/atomic-pkglayer/
 cd atomic-pkglayer
-curl -O http://example.com/kernel-debug.rpm
-./atomic-pkglayer ./kernel-deug.rpm
-exit
+git checkout v2015.3
 ```
 
-You're now in a shell on the host:
+##### Download RPMs
+* manually
+```
+curl -O http://example.com/kernel-debug.rpm
+```
+* using yumdownloader
+```
+yumdownloader --resolve ruby
+```
+##### Install the RPMs into the Atomic Host system and exit the container
+* Single RPM
+```
+/root/atomic-pkglayer/atomichost-debuglayer /path/to/specific.rpm
+exit
+```
+* Multiple RPMs
+```
+/root/atomic-pkglayer/atomichost-debuglayer /path/to/rpms/*rpm
+exit
+```
+#### Back on the Atomic Host system
+
+* You will need to reboot for the update to take effect.
 
 ```
 atomic host status
+systemctl reboot
+```
+
+* To undo the changes, use `atomic host rollback`, and reboot again.
+
+```
+atomic host rollback
 systemctl reboot
 ```
