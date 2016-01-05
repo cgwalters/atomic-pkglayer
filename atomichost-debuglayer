@@ -145,7 +145,7 @@ try:
         if os.path.isdir(checkout_tmp_usrlib_boot):
             shutil.rmtree(checkout_tmp_usrlib_boot)
 
-    child_argv = ['rpm', '--dbpath', '/usr/share/rpm', '--root', checkout_tmp, '-U', ]
+    child_argv = ['rpm', '--dbpath', '/usr/share/rpm', '--root', checkout_tmp, '--replacepkgs', '-U', ]
     run_sync(child_argv + args.pkgs)
 
     if includes_kernel:
