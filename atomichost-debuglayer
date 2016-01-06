@@ -99,6 +99,14 @@ treefile_path = target_dpath + '/usr/share/rpm-ostree/treefile.json'
 with open(treefile_path) as f:
     treefile = json.load(f)
 
+# https://bugzilla.redhat.com/show_bug.cgi?id=1293718#c14
+altfiles_path = '/usr/lib64/libnss_altfiles.so.2'
+if not os.path.exists(altfiles_path):
+    print("Copying host {}".format(altfiles_path))
+    shutil.copy('/host' + altfiles_path, altfiles_path)
+    nsswitch_conf = '/etc/nsswitch.conf'
+    shutil.copy('/host' + nsswitch_conf, nsswitch_conf)
+
 # Note that we use the host's /var/tmp because
 # we want hardlinks from /host/ostree/repo to work.
 # Except we actually traverse the real path instead of /host/var because
