@@ -45,16 +45,32 @@ exit
 ```
 #### Back on the Atomic Host system
 
-* You will need to reboot for the update to take effect.
+* Inspect the system state:
 
 ```
 atomic host status
-systemctl reboot
 ```
+
+Notice that we have a custom tree commit with a `local` version,
+which combines the base tree with our custom packages.
+
+To go to the new deployment:
+
+```
+systemctl reboot
+ ```
 
 * To undo the changes, use `atomic host rollback`, and reboot again.
 
 ```
 atomic host rollback
 systemctl reboot
+```
+
+To free up the space occupied by our custom tree (be sure you have
+performed the rollback to the production tree first):
+
+```
+ostree refs --delete temp-local
+ostree admin undeploy 1
 ```
