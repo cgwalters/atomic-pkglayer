@@ -20,7 +20,7 @@ atomic run rhel7/rhel-tools
 cd /root
 git clone https://github.com/cgwalters/atomic-pkglayer/
 cd atomic-pkglayer
-git checkout v2015.3
+git checkout v2015.4
 ```
 
 ##### Download RPMs
