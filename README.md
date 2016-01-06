@@ -20,7 +20,7 @@ atomic run rhel7/rhel-tools
 cd /root
 git clone https://github.com/cgwalters/atomic-pkglayer/
 cd atomic-pkglayer
-git checkout v2015.3
+git checkout v2015.4
 ```
 
 ##### Download RPMs
@@ -71,6 +71,5 @@ To free up the space occupied by our custom tree (be sure you have
 performed the rollback to the production tree first):
 
 ```
-ostree refs --delete temp-local
 ostree admin undeploy 1
 ```
