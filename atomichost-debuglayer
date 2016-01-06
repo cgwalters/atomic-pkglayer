@@ -32,6 +32,11 @@ def run_sync(args, **kwargs):
     print_running(args)
     subprocess.check_call(args, **kwargs)
 
+def run_sync_get_rc(args, **kwargs):
+    """Wraps subprocess.call(), logging the command line too."""
+    print_running(args)
+    return subprocess.call(args, **kwargs)
+
 parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]))
 parser.add_argument('pkgs', metavar='PKG', type=str, nargs='+',
                    help='An RPM package')
@@ -195,9 +200,15 @@ try:
 from-commit={0}
 packages={1}
 """.format(target_commit, " ".join(map(os.path.basename, args.pkgs))))
-    run_sync(['ostree', '--repo=/host/ostree/repo', 'commit', '--link-checkout-speedup', '--add-metadata-string=version=local', '-s', 'Tree with local packages', '-m', 'Generated from {0}'.format(target_commit), '-b', 'temp-local'], cwd=checkout_tmp)
-    print("Deploying new commit...")
-    run_sync(['nsenter', '-t', '1', '--mount', '--', 'ostree', 'admin', 'deploy', '--os=' + target_osname, '--origin-file=' + origin_path.replace('/host',''), 'temp-local'])
+    temp_local = 'temp-local'
+    try:
+        run_sync(['ostree', '--repo=/host/ostree/repo', 'commit', '--link-checkout-speedup', '--add-metadata-string=version=local', '-s', 'Tree with local packages', '-m', 'Generated from {0}'.format(target_commit), '-b', temp_local], cwd=checkout_tmp)
+        print("Deploying new commit...")
+        run_sync(['nsenter', '-t', '1', '--mount', '--', 'ostree', 'admin', 'deploy', '--os=' + target_osname, '--origin-file=' + origin_path.replace('/host',''), temp_local])
+    finally:
+        rc = run_sync_get_rc(['nsenter', '-t', '1', '--mount', '--', 'ostree', 'refs', '--delete', temp_local])
+        if rc != 0:
+            print("WARNING: failed to delete temp-local ref")
     print("")
     print("Success!")
     print(UNDO_MESSAGE)
