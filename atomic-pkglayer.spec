@@ -15,7 +15,8 @@ BuildRequires: autoconf automake libtool
 # For docs
 
 Requires: pygobject3-base
-Requires: rpm-ostree
+Requires: /usr/bin/rpm-ostree
+Requires: ostree
 
 %description
 %{summary}
