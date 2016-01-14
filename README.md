@@ -35,12 +35,12 @@ yumdownloader --resolve ruby
 ##### Install the RPMs into the Atomic Host system and exit the container
 * Single RPM
 ```
-/root/atomic-pkglayer/atomichost-debuglayer /path/to/specific.rpm
+/root/atomic-pkglayer/atomic-pkglayer /path/to/specific.rpm
 exit
 ```
 * Multiple RPMs
 ```
-/root/atomic-pkglayer/atomichost-debuglayer /path/to/rpms/*rpm
+/root/atomic-pkglayer/atomic-pkglayer /path/to/rpms/*rpm
 exit
 ```
 #### Back on the Atomic Host system
