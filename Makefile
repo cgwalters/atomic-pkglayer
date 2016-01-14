@@ -1,6 +1,6 @@
 include Makefile.inc
 
-bin_programs = atomichost-debuglayer
+bin_programs = atomic-pkglayer
 
 all:
 
