@@ -1,7 +1,7 @@
 Summary: A tool to install debug packages on Atomic Host
 Name: atomic-pkglayer
-Version: 2015.3
-Release: 2%{?dist}
+Version: 2016.1
+Release: 1%{?dist}
 #VCS: https://github.com/cgwalters/atomic-pkglayer
 # This tarball is generated via `git archive`.
 # It doesn't follow the Github guidelines because they only work for
