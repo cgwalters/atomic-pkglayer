@@ -2,9 +2,6 @@
   hosts: all
   sudo: yes
 
-  vars:
-    toolsimage: docker-registry.usersys.redhat.com/cgwalters/rhel-tools
-
   tasks:
     # Sadly, docker-registry.usersys is not signed
     - lineinfile: dest=/etc/sysconfig/docker regexp=INSECURE_REGISTRY line="INSECURE_REGISTRY='--insecure-registry 0.0.0.0/0'"
